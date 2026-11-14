@@ -1,0 +1,543 @@
+local Players = game:GetService("Players")
+local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local UserInputService = game:GetService("UserInputService")
+
+-- Anti-double execution
+if _G.__LightningKeyActive then return end
+_G.__LightningKeyActive = true
+
+-- ============================================================
+--  CONFIG
+-- ============================================================
+local CONFIG = {
+    KEY_LIST_URL  = "https://pastebin.com/raw/4XqE6xg0",
+    DISCORD_URL   = "https://discord.gg/g8XyAyXfkt",
+    MAX_ATTEMPTS  = 5,
+    LOCKOUT_TIME  = 30,
+    MIN_KEY_LEN   = 4,
+    MAX_KEY_LEN   = 200,
+    HTTP_TIMEOUT  = 10,
+}
+
+-- ============================================================
+--  THEME (LightningHub sarı/altın)
+-- ============================================================
+local C_BG         = Color3.fromRGB(25, 22, 15)
+local C_TITLEBAR   = Color3.fromRGB(38, 32, 18)
+local C_ACCENT     = Color3.fromRGB(255, 200, 40)
+local C_ACCENT_HOV = Color3.fromRGB(255, 220, 80)
+local C_TEXT       = Color3.fromRGB(240, 225, 180)
+local C_TEXT_DIM   = Color3.fromRGB(200, 180, 130)
+local C_STROKE     = Color3.fromRGB(180, 150, 40)
+local C_BTN        = Color3.fromRGB(55, 48, 28)
+local C_BTN_HOV    = Color3.fromRGB(90, 75, 35)
+local C_NOTIF      = Color3.fromRGB(45, 38, 22)
+local C_NOTIF_PRI  = Color3.fromRGB(170, 40, 40)
+local C_CLOSE      = Color3.fromRGB(200, 55, 55)
+local C_INPUT      = Color3.fromRGB(35, 32, 20)
+local C_SUCCESS    = Color3.fromRGB(80, 200, 80)
+
+-- ============================================================
+--  STATE
+-- ============================================================
+local attempts  = 0
+local lockedOut = false
+local verifying = false
+local verified  = false
+
+-- ============================================================
+--  GUI PARENT
+-- ============================================================
+local parent
+if gethui then
+    local ok, res = pcall(gethui)
+    if ok and res then parent = res end
+end
+if not parent then
+    local ok, res = pcall(function() return CoreGui end)
+    if ok and res then parent = res end
+end
+if not parent then
+    parent = Players.LocalPlayer:WaitForChild("PlayerGui")
+end
+
+-- ============================================================
+--  SCREEN GUI
+-- ============================================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name           = "LightningKeySystem"
+ScreenGui.ResetOnSpawn   = false
+ScreenGui.IgnoreGuiInset = true
+ScreenGui.DisplayOrder   = 1000
+ScreenGui.Parent         = parent
+
+-- ============================================================
+--  MAIN FRAME
+-- ============================================================
+local MainFrame = Instance.new("Frame")
+MainFrame.Size             = UDim2.new(0, 340, 0, 280)
+MainFrame.Position         = UDim2.new(0.5, -170, 0.5, -140)
+MainFrame.BackgroundColor3 = C_BG
+MainFrame.BorderSizePixel  = 0
+MainFrame.Parent           = ScreenGui
+Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 10)
+local mainStroke = Instance.new("UIStroke", MainFrame)
+mainStroke.Color     = C_STROKE
+mainStroke.Thickness = 1
+
+-- Title bar
+local TitleBar = Instance.new("Frame")
+TitleBar.Size             = UDim2.new(1, 0, 0, 38)
+TitleBar.BackgroundColor3 = C_TITLEBAR
+TitleBar.BorderSizePixel  = 0
+TitleBar.Parent           = MainFrame
+Instance.new("UICorner", TitleBar).CornerRadius = UDim.new(0, 10)
+
+local TitleLbl = Instance.new("TextLabel")
+TitleLbl.Size               = UDim2.new(1, -50, 1, 0)
+TitleLbl.Position           = UDim2.new(0, 14, 0, 0)
+TitleLbl.BackgroundTransparency = 1
+TitleLbl.Text               = "⚡  LightningHub · Key System"
+TitleLbl.TextColor3         = C_ACCENT
+TitleLbl.Font               = Enum.Font.GothamBold
+TitleLbl.TextSize           = 14
+TitleLbl.TextXAlignment     = Enum.TextXAlignment.Left
+TitleLbl.Parent             = TitleBar
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size             = UDim2.new(0, 28, 0, 28)
+CloseBtn.Position         = UDim2.new(1, -34, 0, 5)
+CloseBtn.BackgroundColor3 = C_CLOSE
+CloseBtn.BorderSizePixel  = 0
+CloseBtn.Text             = "X"
+CloseBtn.TextColor3       = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font             = Enum.Font.GothamBold
+CloseBtn.TextSize         = 14
+CloseBtn.Parent           = TitleBar
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
+
+-- Input
+local InputBox = Instance.new("TextBox")
+InputBox.Size               = UDim2.new(1, -30, 0, 38)
+InputBox.Position           = UDim2.new(0, 15, 0, 55)
+InputBox.PlaceholderText    = "Enter your key..."
+InputBox.Text               = ""
+InputBox.BackgroundColor3   = C_INPUT
+InputBox.TextColor3         = C_TEXT
+InputBox.PlaceholderColor3  = C_TEXT_DIM
+InputBox.TextSize           = 13
+InputBox.Font               = Enum.Font.Gotham
+InputBox.ClearTextOnFocus   = false
+InputBox.Parent             = MainFrame
+Instance.new("UICorner", InputBox).CornerRadius = UDim.new(0, 6)
+local inStroke = Instance.new("UIStroke", InputBox)
+inStroke.Color     = C_STROKE
+inStroke.Thickness = 1
+
+-- Submit
+local SubmitBtn = Instance.new("TextButton")
+SubmitBtn.Size             = UDim2.new(1, -30, 0, 38)
+SubmitBtn.Position         = UDim2.new(0, 15, 0, 105)
+SubmitBtn.BackgroundColor3 = C_ACCENT
+SubmitBtn.Text             = "Submit Key"
+SubmitBtn.TextColor3       = Color3.fromRGB(20, 20, 20)
+SubmitBtn.TextSize         = 14
+SubmitBtn.Font             = Enum.Font.GothamBold
+SubmitBtn.AutoButtonColor  = false
+SubmitBtn.Parent           = MainFrame
+Instance.new("UICorner", SubmitBtn).CornerRadius = UDim.new(0, 6)
+
+-- Get Key
+local GetKeyBtn = Instance.new("TextButton")
+GetKeyBtn.Size             = UDim2.new(1, -30, 0, 38)
+GetKeyBtn.Position         = UDim2.new(0, 15, 0, 155)
+GetKeyBtn.BackgroundColor3 = C_BTN
+GetKeyBtn.Text             = "Get Key (Discord)"
+GetKeyBtn.TextColor3       = C_TEXT
+GetKeyBtn.TextSize         = 14
+GetKeyBtn.Font             = Enum.Font.GothamBold
+GetKeyBtn.AutoButtonColor  = false
+GetKeyBtn.Parent           = MainFrame
+Instance.new("UICorner", GetKeyBtn).CornerRadius = UDim.new(0, 6)
+
+-- Status
+local StatusLbl = Instance.new("TextLabel")
+StatusLbl.Size                  = UDim2.new(1, -30, 0, 24)
+StatusLbl.Position              = UDim2.new(0, 15, 0, 205)
+StatusLbl.BackgroundTransparency = 1
+StatusLbl.Text                  = "Enter your key to continue."
+StatusLbl.TextColor3            = C_TEXT_DIM
+StatusLbl.TextSize              = 11
+StatusLbl.Font                  = Enum.Font.Gotham
+StatusLbl.TextXAlignment        = Enum.TextXAlignment.Left
+StatusLbl.Parent                = MainFrame
+
+-- Footer
+local FooterLbl = Instance.new("TextLabel")
+FooterLbl.Size                  = UDim2.new(1, -30, 0, 20)
+FooterLbl.Position              = UDim2.new(0, 15, 1, -30)
+FooterLbl.BackgroundTransparency = 1
+FooterLbl.Text                  = "🔒 Protected · Rate-limited · Exact-match"
+FooterLbl.TextColor3            = C_TEXT_DIM
+FooterLbl.TextSize              = 10
+FooterLbl.Font                  = Enum.Font.Gotham
+FooterLbl.TextXAlignment        = Enum.TextXAlignment.Center
+FooterLbl.Parent                = MainFrame
+
+-- Drag
+local dragging, dragInput, dragStart, startPos
+TitleBar.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        dragging  = true
+        dragStart = input.Position
+        startPos  = MainFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then
+                dragging = false
+            end
+        end)
+    end
+end)
+TitleBar.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement
+    or input.UserInputType == Enum.UserInputType.Touch then
+        dragInput = input
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local d = input.Position - dragStart
+        MainFrame.Position = UDim2.new(
+            startPos.X.Scale, startPos.X.Offset + d.X,
+            startPos.Y.Scale, startPos.Y.Offset + d.Y)
+    end
+end)
+
+-- Hover effects (Submit butonu success durumunda hover'ı devre dışı bırakır)
+SubmitBtn.MouseEnter:Connect(function()
+    if verifying or verified then return end
+    TweenService:Create(SubmitBtn, TweenInfo.new(0.12), {BackgroundColor3 = C_ACCENT_HOV}):Play()
+end)
+SubmitBtn.MouseLeave:Connect(function()
+    if verifying or verified then return end
+    TweenService:Create(SubmitBtn, TweenInfo.new(0.12), {BackgroundColor3 = C_ACCENT}):Play()
+end)
+GetKeyBtn.MouseEnter:Connect(function()
+    TweenService:Create(GetKeyBtn, TweenInfo.new(0.12), {BackgroundColor3 = C_BTN_HOV}):Play()
+end)
+GetKeyBtn.MouseLeave:Connect(function()
+    TweenService:Create(GetKeyBtn, TweenInfo.new(0.12), {BackgroundColor3 = C_BTN}):Play()
+end)
+
+-- ============================================================
+--  NOTIFICATIONS
+-- ============================================================
+local notifHolder = Instance.new("Frame")
+notifHolder.Size                = UDim2.new(0, 320, 1, -20)
+notifHolder.Position            = UDim2.new(1, -330, 0, 10)
+notifHolder.BackgroundTransparency = 1
+notifHolder.Parent              = ScreenGui
+local nList = Instance.new("UIListLayout", notifHolder)
+nList.Padding           = UDim.new(0, 6)
+nList.SortOrder         = Enum.SortOrder.LayoutOrder
+nList.VerticalAlignment = Enum.VerticalAlignment.Top
+
+local function notify(title, text, isError, duration)
+    local n = Instance.new("Frame")
+    n.Size             = UDim2.new(1, 0, 0, 52)
+    n.BackgroundColor3 = isError and C_NOTIF_PRI or C_NOTIF
+    n.BorderSizePixel  = 0
+    n.Parent           = notifHolder
+    Instance.new("UICorner", n).CornerRadius = UDim.new(0, 8)
+    local ns = Instance.new("UIStroke", n)
+    ns.Color, ns.Thickness = C_STROKE, 1
+
+    local nt = Instance.new("TextLabel")
+    nt.Size                  = UDim2.new(1, -20, 0, 20)
+    nt.Position              = UDim2.new(0, 10, 0, 5)
+    nt.BackgroundTransparency = 1
+    nt.Text                  = tostring(title)
+    nt.TextColor3            = isError and Color3.fromRGB(255, 180, 180) or C_ACCENT
+    nt.Font                  = Enum.Font.GothamBold
+    nt.TextSize              = 13
+    nt.TextXAlignment        = Enum.TextXAlignment.Left
+    nt.Parent                = n
+
+    local nx = Instance.new("TextLabel")
+    nx.Size                  = UDim2.new(1, -20, 0, 22)
+    nx.Position              = UDim2.new(0, 10, 0, 24)
+    nx.BackgroundTransparency = 1
+    nx.Text                  = tostring(text or "")
+    nx.TextColor3            = C_TEXT
+    nx.Font                  = Enum.Font.Gotham
+    nx.TextSize              = 11
+    nx.TextXAlignment        = Enum.TextXAlignment.Left
+    nx.TextWrapped           = true
+    nx.Parent                = n
+
+    task.delay(duration or 3, function()
+        if not n.Parent then return end
+        TweenService:Create(n, TweenInfo.new(0.3), {BackgroundTransparency = 1}):Play()
+        for _, c in ipairs(n:GetDescendants()) do
+            if c:IsA("TextLabel") then
+                TweenService:Create(c, TweenInfo.new(0.3), {TextTransparency = 1}):Play()
+            end
+        end
+        task.wait(0.32)
+        if n.Parent then n:Destroy() end
+    end)
+end
+
+-- ============================================================
+--  MINI "L" BUTTON (draggable)
+-- ============================================================
+local MiniBtn = Instance.new("TextButton")
+MiniBtn.Size             = UDim2.new(0, 36, 0, 36)
+MiniBtn.Position         = UDim2.new(0, 10, 0, 200)
+MiniBtn.BackgroundColor3 = C_TITLEBAR
+MiniBtn.BorderSizePixel  = 0
+MiniBtn.Text             = "L"
+MiniBtn.TextColor3       = C_ACCENT
+MiniBtn.Font             = Enum.Font.GothamBold
+MiniBtn.TextSize         = 18
+MiniBtn.AutoButtonColor  = false
+MiniBtn.Visible          = false
+MiniBtn.Parent           = ScreenGui
+Instance.new("UICorner", MiniBtn).CornerRadius = UDim.new(0, 8)
+local miniStroke = Instance.new("UIStroke", MiniBtn)
+miniStroke.Color, miniStroke.Thickness = C_ACCENT, 1.5
+
+local mDrag, mStart, mPos, mMoved = false, nil, nil, false
+MiniBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        mDrag, mMoved = true, false
+        mStart, mPos  = input.Position, MiniBtn.Position
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if mDrag and (input.UserInputType == Enum.UserInputType.MouseMovement
+               or input.UserInputType == Enum.UserInputType.Touch) then
+        local d = input.Position - mStart
+        if d.Magnitude > 3 then mMoved = true end
+        if mMoved then
+            MiniBtn.Position = UDim2.new(
+                mPos.X.Scale, mPos.X.Offset + d.X,
+                mPos.Y.Scale, mPos.Y.Offset + d.Y)
+        end
+    end
+end)
+MiniBtn.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1
+    or input.UserInputType == Enum.UserInputType.Touch then
+        if not mMoved then
+            MainFrame.Visible = true
+            MiniBtn.Visible   = false
+        end
+        mDrag = false
+    end
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = false
+    MiniBtn.Visible   = true
+end)
+
+-- ============================================================
+--  GÜVENLİ HTTP KATMANI (multi-executor + timeout + tamper)
+-- ============================================================
+local function httpGet(url, timeout)
+    timeout = timeout or CONFIG.HTTP_TIMEOUT
+    local fetcher
+    if syn and type(syn.request) == "function" then
+        fetcher = function(u)
+            local r = syn.request({Url = u, Method = "GET"})
+            return r and r.Body or nil
+        end
+    elseif http and type(http.request) == "function" then
+        fetcher = function(u)
+            local r = http.request({Url = u, Method = "GET"})
+            return r and r.Body or nil
+        end
+    elseif type(request) == "function" then
+        fetcher = function(u)
+            local r = request({Url = u, Method = "GET"})
+            return r and r.Body or nil
+        end
+    elseif type(game.HttpGet) == "function" then
+        fetcher = function(u) return game:HttpGet(u) end
+    else
+        return nil, "HTTP yok"
+    end
+
+    local result, done, err
+    task.spawn(function()
+        local ok, res = pcall(fetcher, url)
+        if ok then result = res else err = tostring(res) end
+        done = true
+    end)
+    local start = tick()
+    while not done and (tick() - start) < timeout do
+        task.wait(0.1)
+    end
+    if not done then return nil, "Timeout" end
+    if err then return nil, err end
+    return result
+end
+
+-- ============================================================
+--  KEY VALIDATION (güvenli)
+-- ============================================================
+local function sanitizeKey(raw)
+    local k = tostring(raw or "")
+    k = k:gsub("^%s+", ""):gsub("%s+$", "")
+    return k
+end
+
+local function fetchKeyList()
+    if type(game.HttpGet) ~= "function" then
+        return nil, "Tamper tespit edildi"
+    end
+    local body, err = httpGet(CONFIG.KEY_LIST_URL, CONFIG.HTTP_TIMEOUT)
+    if not body then return nil, err or "Fetch unsuccesful" end
+    if type(body) ~= "string" or #body < 4 then
+        return nil, "Do you think you're smart?"
+    end
+    local low = body:lower()
+    if low:find("<!doctype") or low:find("<html")
+       or low:find("404 not found") or low:find("not found") then
+        return nil, "Server error"
+    end
+    return body, nil
+end
+
+local function validateKey(rawKey)
+    local key = sanitizeKey(rawKey)
+    if #key < CONFIG.MIN_KEY_LEN then
+        return false, "The key is very short."
+    end
+    if #key > CONFIG.MAX_KEY_LEN then
+        return false, "The key is too long"
+    end
+    if key:find("%z") then
+        return false, "Invalid character"
+    end
+    if key:find("[\r\n]") then
+        return false, "Invalid format (02)"
+    end
+
+    local list, fetchErr = fetchKeyList()
+    if not list then
+        return false, fetchErr or "Connect Error (244)"
+    end
+
+    -- ⚠️ CRITICAL FIX: satır-satır TAM eşleşme (substring bypass engellendi)
+    for line in list:gmatch("[^\r\n]+") do
+        local trimmed = line:gsub("^%s+", ""):gsub("%s+$", "")
+        if trimmed ~= "" and trimmed == key then
+            return true, "Verified"
+        end
+    end
+    return false, "Invalid key"
+end
+
+-- ============================================================
+--  SUBMIT HANDLER
+-- ============================================================
+SubmitBtn.MouseButton1Click:Connect(function()
+    if verifying or verified then return end
+    if lockedOut then
+        notify("Locked", CONFIG.LOCKOUT_TIME .. "s wait.", true, 4)
+        return
+    end
+
+    local input = InputBox.Text
+    if not input or input == "" then
+        notify("Empty", "Please enter a key.", true, 3)
+        return
+    end
+
+    verifying        = true
+    SubmitBtn.Text   = "Verifying..."
+    SubmitBtn.Active = false
+    StatusLbl.Text   = "Connecting to the server..."
+    StatusLbl.TextColor3 = C_ACCENT
+
+    task.spawn(function()
+        local ok, reason = validateKey(input)
+
+        if ok then
+            verified                     = true
+            StatusLbl.Text               = "✓ Verified! Loading..."
+            StatusLbl.TextColor3         = C_SUCCESS
+            SubmitBtn.Text               = "Verified"
+            SubmitBtn.BackgroundColor3   = C_SUCCESS
+            notify("Success", "Key verified! Hub is loading...", false, 4)
+            task.wait(1.2)
+            InputBox.Text = ""
+            if ScreenGui and ScreenGui.Parent then
+                ScreenGui:Destroy()
+            end
+            _G.__LightningKeyActive = false
+            print("[LightningHub] Key verified! Hub is loading...")
+
+            -- 👇 BURAYA ANA SCRIPTİNİN LOAD KODUNU EKLE
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/halilibrahimseviml1/op-script/refs/heads/main/gg"))()
+        else
+            attempts = attempts + 1
+            local remaining = CONFIG.MAX_ATTEMPTS - attempts
+            if attempts >= CONFIG.MAX_ATTEMPTS then
+                lockedOut               = true
+                StatusLbl.Text          = "Locked — " .. CONFIG.LOCKOUT_TIME .. "s Wait"
+                StatusLbl.TextColor3    = Color3.fromRGB(255, 100, 100)
+                notify("Locked!",
+                    "Too many attempts! " .. CONFIG.LOCKOUT_TIME .. "s Try again",
+                    true, 4)
+                task.delay(CONFIG.LOCKOUT_TIME, function()
+                    lockedOut = false
+                    attempts  = 0
+                    if StatusLbl and StatusLbl.Parent then
+                        StatusLbl.Text       = "Enter your key to continue."
+                        StatusLbl.TextColor3 = C_TEXT_DIM
+                    end
+                end)
+            else
+                StatusLbl.Text       = "✗ " .. (reason or "Invaild")
+                                       .. " — " .. remaining .. " attempt remaining"
+                StatusLbl.TextColor3 = Color3.fromRGB(255, 100, 100)
+                notify("Unsuccessful",
+                    (reason or "Invalid key") .. " (" .. remaining .. " attempt remaining)",
+                    true, 3)
+            end
+            SubmitBtn.Text   = "Submit Key"
+            SubmitBtn.Active = true
+        end
+        verifying = false
+    end)
+end)
+
+-- ============================================================
+--  GET KEY HANDLER
+-- ============================================================
+GetKeyBtn.MouseButton1Click:Connect(function()
+    local ok = false
+    if type(setclipboard) == "function" then
+        ok = pcall(setclipboard, CONFIG.DISCORD_URL)
+    elseif type(toclipboard) == "function" then
+        ok = pcall(toclipboard, CONFIG.DISCORD_URL)
+    elseif type(set_clipboard) == "function" then
+        ok = pcall(set_clipboard, CONFIG.DISCORD_URL)
+    end
+    if ok then
+        notify("Discord Copied", "The discord.gg link is on your clipboard!", false, 3)
+    else
+        notify("Error", "Could not be copied. Join: " .. CONFIG.DISCORD_URL, true, 4)
+    end
+end)
+
+-- Karşılama
+task.delay(0.3, function()
+    notify("⚡ LightningHub", "Welcome! Enter your key to continue.", false, 3)
+end)
